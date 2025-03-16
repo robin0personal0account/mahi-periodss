@@ -1,0 +1,432 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Period Tracker</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/5.11.3/main.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/5.11.3/main.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #FFF0F5;
+            color: #4A2C2A;
+            text-align: center;
+            padding: 2vw;
+            transition: background 0.3s, color 0.3s;
+            margin: 0;
+        }
+        .container {
+            max-width: 90vw;
+            width: 100%;
+            background: #FFE4E1;
+            padding: 2vw;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin: 0 auto;
+        }
+        h1, h3, h4 { 
+            color: #A61C35; 
+            font-size: clamp(1.5rem, 4vw, 2rem); 
+        }
+        label {
+            display: block;
+            margin: 1vw 0 0.5vw;
+            font-weight: bold;
+            color: #7B3F4E;
+            font-size: clamp(0.9rem, 2.5vw, 1rem);
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 1vw;
+            margin: 0.5vw 0 1.5vw;
+            border-radius: 8px;
+            border: 2px solid #F8BBD0;
+            background: #FDF5F6;
+            box-sizing: border-box;
+            font-size: clamp(0.9rem, 2.5vw, 1rem);
+        }
+        button {
+            width: 100%;
+            padding: 1.2vw;
+            margin: 1vw 0;
+            border-radius: 8px;
+            border: none;
+            background-color: #D81B60;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+            font-size: clamp(0.9rem, 2.5vw, 1rem);
+        }
+        button:hover { background-color: #AD1457; }
+        .dark-mode { background-color: #2E1A2F; color: #F8BBD0; }
+        .dark-mode .container { background: #4A2C2A; color: #F8BBD0; }
+        .dark-mode input, .dark-mode select, .dark-mode textarea {
+            background: #6D3940;
+            border-color: #D81B60;
+            color: #F8BBD0;
+        }
+        #entries, #stats, #charts, #calendar {
+            max-width: 90vw;
+            width: 100%;
+            margin: 2vw auto;
+            background: white;
+            padding: 1.5vw;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            text-align: left;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-size: clamp(0.8rem, 2vw, 1rem); 
+        }
+        th, td { 
+            padding: 1vw; 
+            border: 1px solid #F8BBD0; 
+            text-align: center; 
+        }
+        th { background-color: #FCE4EC; color: #7B3F4E; }
+        canvas { max-width: 100%; height: clamp(200px, 50vw, 400px) !important; }
+        .no-data { color: #7B3F4E; font-style: italic; font-size: clamp(0.9rem, 2.5vw, 1rem); }
+        #showMoreBtn { width: 50%; margin: 10px auto; display: block; }
+
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .container { padding: 10px; }
+            h1, h3, h4 { font-size: 1.2rem; }
+            label, input, select, textarea, button { font-size: 0.9rem; }
+            button { padding: 8px; }
+            #entries { overflow-x: auto; }
+            table { min-width: 600px; }
+            th, td { padding: 5px; }
+            #charts { padding: 5px; }
+            canvas { height: 200px !important; }
+            #calendar { font-size: 0.8rem; }
+            #showMoreBtn { width: 80%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🩸 Period Tracker</h1>
+        
+        <label>Select Period Day:</label>
+        <select id="day"></select>
+
+        <label>Select Date:</label>
+        <input type="date" id="date">
+
+        <label>How do you feel? (Mood):</label>
+        <select id="mood"></select>
+
+        <label>Flow Intensity:</label>
+        <select id="flow"></select>
+
+        <label>Average Cycle Length (days):</label>
+        <input type="number" id="cycleLength" min="20" max="40" value="28">
+
+        <label>Notes:</label>
+        <textarea id="notes" placeholder="Write something..."></textarea>
+
+        <button id="saveBtn">Add Entry</button>
+
+        <h3>📅 Your Period Data:</h3>
+        <div id="entries"></div>
+
+        <h3>📊 Insights:</h3>
+        <div id="stats"></div>
+
+        <h3>📈 Bleeding & Mood Tracker:</h3>
+        <div id="charts">
+            <canvas id="periodChart"></canvas>
+            <button id="showMoreBtn">Show More</button>
+        </div>
+
+        <h3>📆 Calendar:</h3>
+        <div id="calendar"></div>
+
+        <button id="darkModeToggle">🌙 Dark Mode</button>
+    </div>
+
+    <script>
+        let periodChartInstance = null;
+        let visibleDays = 14; // Initially show last 14 days
+        const moodOptions = {
+            '🙂': 'Normal', '😖': 'Cramps', '😴': 'Tired', '😊': 'Happy', '😡': 'Moody'
+        };
+        const flowOptions = {
+            '💧': 'Light', '💦': 'Medium', '🌊': 'Heavy'
+        };
+        const flowValues = { '💧': 1, '💦': 2, '🌊': 3 };
+        const moodValues = { '🙂': 3, '😊': 4, '😴': 2, '😖': 1, '😡': 0 };
+
+        $(document).ready(function() {
+            for (let i = 1; i <= 7; i++) {
+                $('#day').append(`<option value="${i}">Day ${i}</option>`);
+            }
+            $.each(moodOptions, (key, value) => {
+                $('#mood').append(`<option value="${key}">${key} ${value}</option>`);
+            });
+            $.each(flowOptions, (key, value) => {
+                $('#flow').append(`<option value="${key}">${key} ${value}</option>`);
+            });
+
+            $('#saveBtn').click(saveData);
+            $('#darkModeToggle').click(toggleDarkMode);
+            $('#showMoreBtn').click(showMoreData);
+            loadInitialData();
+        });
+
+        function saveData() {
+            const entry = {
+                day: $('#day').val(),
+                date: $('#date').val(),
+                mood: $('#mood').val(),
+                flow: $('#flow').val(),
+                cycleLength: parseInt($('#cycleLength').val()),
+                notes: $('#notes').val()
+            };
+
+            if (!entry.date) {
+                alert("Please select a date.");
+                return;
+            }
+
+            let entries = JSON.parse(localStorage.getItem("periodEntries")) || [];
+            entries.push(entry);
+            localStorage.setItem("periodEntries", JSON.stringify(entries));
+            updateAllDisplays();
+            $('#notes').val('');
+        }
+
+        function deleteEntry(index) {
+            let entries = JSON.parse(localStorage.getItem("periodEntries")) || [];
+            entries.splice(index, 1);
+            localStorage.setItem("periodEntries", JSON.stringify(entries));
+            updateAllDisplays();
+        }
+
+        function displayEntries() {
+            const entries = JSON.parse(localStorage.getItem("periodEntries")) || [];
+            if (!entries.length) {
+                $('#entries').html('<p class="no-data">No entries yet. Add one above!</p>');
+                return;
+            }
+            $('#entries').html(`
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th><th>Day</th><th>Mood</th><th>Flow</th><th>Cycle Length</th><th>Notes</th><th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${entries.map((e, i) => `
+                            <tr>
+                                <td>${e.date}</td>
+                                <td>${e.day}</td>
+                                <td>${e.mood} ${moodOptions[e.mood]}</td>
+                                <td>${e.flow} ${flowOptions[e.flow]}</td>
+                                <td>${e.cycleLength}</td>
+                                <td>${e.notes}</td>
+                                <td><button onclick="deleteEntry(${i})">❌</button></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `);
+        }
+
+        function analyzeData() {
+            const entries = JSON.parse(localStorage.getItem("periodEntries")) || [];
+            if (!entries.length) {
+                $('#stats').html('<p class="no-data">No data available yet.</p>');
+                return;
+            }
+
+            const day1Entries = entries.filter(e => e.day === "1").sort((a, b) => new Date(a.date) - new Date(b.date));
+            const cycleLengths = [];
+            for (let i = 1; i < day1Entries.length; i++) {
+                const diff = (new Date(day1Entries[i].date) - new Date(day1Entries[i - 1].date)) / (1000 * 60 * 60 * 24);
+                cycleLengths.push(diff);
+            }
+
+            const avgCycleLength = cycleLengths.length ? (cycleLengths.reduce((a, b) => a + b, 0) / cycleLengths.length).toFixed(1) : "N/A";
+            const cycleConsistency = cycleLengths.length > 1 ? (Math.max(...cycleLengths) - Math.min(...cycleLengths)).toFixed(1) : "N/A";
+            const moodCount = {};
+            entries.forEach(e => moodCount[e.mood] = (moodCount[e.mood] || 0) + 1);
+            const mostCommonMood = Object.keys(moodCount).reduce((a, b) => moodCount[a] > moodCount[b] ? a : b);
+
+            const lastDay1 = day1Entries[day1Entries.length - 1];
+            let nextPeriod = lastDay1 ? new Date(lastDay1.date) : null;
+            if (nextPeriod) nextPeriod.setDate(nextPeriod.getDate() + lastDay1.cycleLength);
+
+            $('#stats').html(`
+                <p><strong>Average Cycle Length:</strong> ${avgCycleLength === "N/A" ? "Add more Day 1 entries" : avgCycleLength + " days"}</p>
+                <p><strong>Cycle Consistency:</strong> ${cycleConsistency === "N/A" ? "Add more Day 1 entries" : cycleConsistency + " days"}</p>
+                <p><strong>Most Common Mood:</strong> ${mostCommonMood} ${moodOptions[mostCommonMood]} (${moodCount[mostCommonMood]} times)</p>
+                <p><strong>Next Predicted Period:</strong> ${nextPeriod ? nextPeriod.toISOString().split("T")[0] : "Add a Day 1 entry"}</p>
+            `);
+        }
+
+        function updateChart() {
+            const entries = JSON.parse(localStorage.getItem("periodEntries")) || [];
+            const ctx = $('#periodChart')[0].getContext('2d');
+
+            if (periodChartInstance) periodChartInstance.destroy();
+
+            if (!entries.length) {
+                periodChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: { datasets: [] },
+                    options: {
+                        plugins: {
+                            title: { display: true, text: 'No Data Yet - Add Entries to See Trends!', font: { size: 16 } }
+                        }
+                    }
+                });
+                $('#showMoreBtn').hide();
+                return;
+            }
+
+            const sortedEntries = entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+            const recentEntries = sortedEntries.slice(-visibleDays); // Show last 14 days by default
+            const labels = recentEntries.map(e => new Date(e.date));
+            const flowData = recentEntries.map(e => flowValues[e.flow]);
+            const moodData = recentEntries.map(e => moodValues[e.mood]);
+
+            $('#showMoreBtn').toggle(sortedEntries.length > visibleDays); // Show button if more data exists
+
+            periodChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Flow Intensity',
+                            data: flowData,
+                            backgroundColor: flowData.map(val => 
+                                val === 1 ? 'rgba(173, 216, 230, 0.7)' : // Light Blue for Light
+                                val === 2 ? 'rgba(255, 182, 193, 0.7)' : // Light Pink for Medium
+                                'rgba(255, 99, 132, 0.7)' // Red for Heavy
+                            ),
+                            borderColor: flowData.map(val => 
+                                val === 1 ? 'rgba(173, 216, 230, 1)' :
+                                val === 2 ? 'rgba(255, 182, 193, 1)' :
+                                'rgba(255, 99, 132, 1)'
+                            ),
+                            borderWidth: 1,
+                            barThickness: window.innerWidth < 600 ? 10 : 20
+                        },
+                        {
+                            type: 'line',
+                            label: 'Mood',
+                            data: moodData,
+                            borderColor: 'rgba(75, 0, 130, 1)', // Indigo for mood line
+                            backgroundColor: 'rgba(75, 0, 130, 0.2)',
+                            fill: false,
+                            tension: 0.4, // Smooth curve
+                            pointRadius: window.innerWidth < 600 ? 3 : 5,
+                            pointHoverRadius: window.innerWidth < 600 ? 5 : 7
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                displayFormats: { day: 'MMM d' }
+                            },
+                            title: { display: true, text: 'Date', font: { size: window.innerWidth < 600 ? 10 : 14 } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            min: 0,
+                            max: 4,
+                            ticks: {
+                                stepSize: 1,
+                                font: { size: window.innerWidth < 600 ? 8 : 12 },
+                                callback: value => {
+                                    if (value === 0) return 'Moody 😡';
+                                    if (value === 1) return 'Cramps 😖 / Light 💧';
+                                    if (value === 2) return 'Tired 😴 / Medium 💦';
+                                    if (value === 3) return 'Normal 🙂 / Heavy 🌊';
+                                    if (value === 4) return 'Happy 😊';
+                                    return '';
+                                }
+                            },
+                            title: { display: true, text: 'Flow / Mood', font: { size: window.innerWidth < 600 ? 10 : 14 } },
+                            grid: { color: 'rgba(0, 0, 0, 0.1)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { font: { size: window.innerWidth < 600 ? 8 : 12 } } },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: context => {
+                                    const entry = recentEntries[context.dataIndex];
+                                    if (context.dataset.label === 'Flow Intensity') {
+                                        return `Flow: ${entry.flow} ${flowOptions[entry.flow]} (${entry.date})`;
+                                    } else {
+                                        return `Mood: ${entry.mood} ${moodOptions[entry.mood]} (${entry.date})${entry.notes ? ' - ' + entry.notes : ''}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function showMoreData() {
+            visibleDays += 14; // Load 14 more days
+            updateChart();
+        }
+
+        function updateCalendar() {
+            const entries = JSON.parse(localStorage.getItem("periodEntries")) || [];
+            $('#calendar').empty();
+            const calendar = new FullCalendar.Calendar($('#calendar')[0], {
+                initialView: window.innerWidth < 600 ? 'listWeek' : 'dayGridMonth',
+                events: entries.map(entry => ({
+                    title: `🩸 Day ${entry.day}`,
+                    start: entry.date,
+                    backgroundColor: '#D81B60'
+                })),
+                height: 'auto'
+            });
+            calendar.render();
+        }
+
+        function toggleDarkMode() {
+            $('body').toggleClass('dark-mode');
+            localStorage.setItem('darkMode', $('body').hasClass('dark-mode'));
+        }
+
+        function loadInitialData() {
+            const entries = JSON.parse(localStorage.getItem("periodEntries")) || [];
+            updateAllDisplays();
+            if (localStorage.getItem('darkMode') === 'true') $('body').addClass('dark-mode');
+        }
+
+        function updateAllDisplays() {
+            displayEntries();
+            analyzeData();
+            updateChart();
+            updateCalendar();
+        }
+    </script>
+</body>
+</html>
